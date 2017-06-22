@@ -1,89 +1,99 @@
-"use strict";
+  "use strict";
 
-module.exports = function (ctx, done) {
-  
-var sendEmail;
-var timePrevious;
-var timeNow;
-var timeDiff;
-var timeDiffInMinutes;
-var previousTimeJson;
-
-// create reusable transporter object using the default SMTP transport
-var api_key = 'key-31f1cd8e1c7c8b2529f2d557fa397750';
-var domain = 'sandbox8209faa3c4f0460b9dde4e28bac79f1e.mailgun.org';
-var mailgun = require('mailgun-js')({apiKey: api_key, domain: domain});
- 
-var data = {
-  from: 'BitCoin User <leandro@bitcoin.com>',
-  to: 'lds1804@gmail.com',
-  subject: 'Bitcoin Price',
-  text: 'Hi, Today the Bitcoin price is U$' + ctx.data.price + '!!'
-};
-
-//Gets the previous time stored in the JSON
-// 
-try{
-ctx.storage.get(function (error, data) {
-        
-        if(data){
-          
-          var jsonObject = JSON.parse(data);
-          timePrevious=jsonObject.timePrevious;
-          console.log("Time previous storage get:"+timePrevious);
-        }
-        
-    });
-} catch (exception){
- 
-          console.log("Exception on getting previues time :"+exception);
+  module.exports = function (ctx, done) {
     
-}
+
+  var timePrevious;
+  var timeDiffInMinutes;
+  var previousTimeJson;
 
 
-timeNow= Date.now();
-
-timeDiff = (timeNow - timePrevious);
-console.log("Time minutes send email:"+timeNow + " timePrevious: " + timePrevious);
-
-timeDiffInMinutes = Math.round(((timeDiff % 86400000) % 3600000) / 60000);
-
-if(timeDiffInMinutes>60 || !timePrevious){
-  sendEmail=true;
-  console.log("Time minutes send email true:"+timePrevious);
-}
-else{
-  sendEmail=false;
-  console.log("Time minutes send email false:" + timePrevious);
-}
-
-
-
- 
-if(sendEmail) {
-  //Send email
-  mailgun.messages().send(data, function (error, body) {  console.log(body);});
-  
-  //Store the current time in the storage
-  previousTimeJson='{ "timePrevious":' + timeNow +'}';
-  
+  //Gets the previous time stored in the JSON
   try{
-  ctx.storage.set(previousTimeJson, function (error) {
-            if (error) return cb(error);
+  ctx.storage.get(function (error, data) {
+          
+          console.log("Data get:"+data);
+
+          if (error) return cb(error);
             
-        });
+            var jsonObject = JSON.parse(data);
+            timePrevious=jsonObject.timePrevious;
+            console.log("Time previous storage get:"+timePrevious);
+            timeDiffInMinutes=calculateTime(timePrevious);
+            
+            sendEmail(timeDiffInMinutes,timePrevious,ctx);
+          
+          
+      });
+  } catch (exception){
+   
+            console.log("Exception on getting previues time :"+exception);
+      
+  }
+
+
+    done(null, 'Price received:, ' + ctx.data.price);
+  }
+
+  //Calculate the time elapsed since the last email was sent
+  function calculateTime(timePrevious){
+    
+    var timeNow;
+    var timeDiff;
+    var timeDiffInMinutes;
+    
+    timeNow= Date.now();
+
+    timeDiff = (timeNow - timePrevious);
+    
+
+    timeDiffInMinutes = Math.round(((timeDiff % 86400000) % 3600000) / 60000);
+    console.log("Time minutes send email:"+timeDiffInMinutes + " timePrevious: " + timePrevious);
+    
+    return timeDiffInMinutes;
+    
+  }
+
+
+  //Sends an emal after a given interval, it was set to 15 for debug purposes
+  //Receives the context, the time of the last email sent, and the difference of time from now to the last 
+  //email sent
+  function sendEmail(timeDiffInMinutes,timePrevious,ctx){
+    
+  // create reusable transporter object using the default SMTP transport
+  var api_key = 'key-31f1cd8e1c7c8b2529f2d557fa397750';
+  var domain = 'sandbox8209faa3c4f0460b9dde4e28bac79f1e.mailgun.org';
+  var mailgun = require('mailgun-js')({apiKey: api_key, domain: domain});
+   
+  var data = {
+    from: 'BitCoin User <leandro@bitcoin.com>',
+    to: 'lds1804@gmail.com',
+    subject: 'Bitcoin Price',
+    text: 'Hi, Today the Bitcoin price is U$' + ctx.data.price + '!!'
+  };
+    
+    
+    if(timeDiffInMinutes>15|| !timePrevious) {
+      mailgun.messages().send(data, function (error, body) {  console.log(body);});
+    
+      //Store the current time in the storage
+      previousTimeJson='{ "timePrevious":' + timeNow +'}';
+    
+    
+      ctx.storage.get(function (error, previousTimeJson) {
+          if (error) return cb(error);
+          
+          previousTimeJson='{ "timePrevious":' + timeNow +'}';
+          console.log("Data get last :"+previousTimeJson);
+          
+          ctx.storage.set(previousTimeJson,{ force: 1 }, function (error) {
+              if (error) return cb(error);
+          });
+      }); 
+  }
+    
 
   }
-  catch(exception){
-    console.log("Exception on getting previues time :"+exception);
-     
-  }
-  
-  
-}
-  
-  done(null, 'Price received:, ' + ctx.data.price);
-}
 
 
 
